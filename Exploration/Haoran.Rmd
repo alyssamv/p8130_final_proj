@@ -1,0 +1,70 @@
+---
+title: "Exploratory analysis"
+author: "Haoran Hu"
+date: "2018-12-9"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(HH)
+library(tableone)
+```
+
+```{r}
+cancer_data = read_csv("..\\data\\Cancer_Registry.csv") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(-geography, -binned_inc)
+
+cancer_data %>% 
+  filter(!is.na(pct_employed16_over)) %>% 
+  cor() %>% 
+  knitr::kable(digits = 3)
+
+descrip_list = cancer_data %>%
+  skimr::skim_to_list()
+
+rbind(descrip_list[[1]], descrip_list[[2]]) %>% 
+  dplyr::select(variable, n, NAs = missing, mean, sd, min = p0, `1st_Q` = p25, median = p50, `3rd Q` = p75, max = p100) %>% 
+  knitr::kable(digits = 3)
+
+```
+
+In order to predict cancer mortalities, we need to consider factors associated with cancer risk and prognosis. 
+
+At first I think median age should be a factor that is associated with both risk and prognosis of cancer, since cancer incidence increases with age(NIH, 2015). However, the data show that there is hardly any correlation between `median age` and `target death rate` and there is no previous study revealing association between median age and cancer mortality rate in population level. That's possibly because higher median ages reflect longer lives of the residents, which indicate better health care system, and a good health care system can effectly reduce mortality rate for cancer patient. Therefore, in population level, these two properties of old age(increasing cancer risk / reflecting good health care system) mitigate against each other, and `median age` does not provide useful information to our model.
+
+There is evidence that marital status is associated with cancer incidence(Kato et al., 1989). In addition, marital status is associated with cancer death rate, and unmarried patients have significantly higher risk of death(Aizer et al., 2013). Therefore, I suggest to include `percent_married` in the model.
+
+Health insurance coverage is another factor that is associated with cancer mortality rate. There is disparity in survival probability between cancer patients with and without health insurance(Ellis, 2018), and between cancer patients with private health coverage and patients with government-provided health coverage(Xiaoling et al, 2013). Then, variables related to insurance coverage should also be included in the model.
+
+Employment status has high correlation with the outcome, but there is no evidence showing association between employment status and cancer risk and prognosis. On the other hand, employment status do have high correlation with income level, which should be related to cancer death rate. I suggest to include `med_income` in the model instead of variables related to employment status to reduce multicolinearity.
+
+There are some research papers analyzing the association between education level and cancer mortality, but the researchers didn't adjust their results for income. I'm not sure about whether we should include variables related to education level in the model.
+
+
+
+
+[1]Aizer AA, Chen MH, McCarthy EP, et al. Marital status and survival in patients with cancer.J Clin Oncol.2013;31:3869-3876.
+
+[2]Age and cancer risk. https://www.cancer.gov/about-cancer/causes-prevention/risk/age
+
+[3]Ellis, Canchola AJ, Spiegel D, Ladabaum U, Haile R, Gomez SL.Trends in Cancer Survival by Health Insurance Status in California From 1997 to 2014.JAMA Oncol. 2018 Mar 1;4(3):317-323. 
+
+[4]Kato I, Tominaga S, Terao C. An epidemiological study on marital status and cancer incidence. Jpn J Cancer Res. 1989 Apr;80(4):306-11.
+
+[5]Xiaoling Niu, Lisa M Roche, Karen S Pawlish, and Kevin A Henry. Cancer survival disparities by health insurance status. Cancer Med. 2013 Jun; 2(3): 403-411.
+
+Here are some plots on variable distributions...
+
+```{r}
+
+ggplot(cancer_data, aes(y = percent_married)) + geom_boxplot(fill = "navy", alpha = 0.5) + labs(title = "Distribution of percent_married")
+
+ggplot(cancer_data, aes(y = pct_private_coverage)) + geom_boxplot(fill = "navy", alpha = 0.5) + labs(title = "Distribution of pct_private_coverage")
+
+ggplot(cancer_data, aes(y = pct_public_coverage)) + geom_boxplot(fill = "navy", alpha = 0.5) + labs(title = "Distribution of pct_public_coverage")
+```
+
