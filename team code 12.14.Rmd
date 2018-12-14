@@ -32,8 +32,11 @@ S.name <- c("Delaware","District of Columbia","Florida","Georgia",
 W.name <- c("Arizona","Colorado","Idaho","New Mexico","Montana",
             "Utah","Nevada","Wyoming","Alaska","California",
             "Hawaii","Oregon","Washington")
+```
 
 
+```{r}
+# import data
 cancer = read_csv('./data/Cancer_Registry.csv') %>%
   janitor::clean_names() %>%
   mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
@@ -49,6 +52,7 @@ cancer = read_csv('./data/Cancer_Registry.csv') %>%
          region = ifelse(state %in% W.name, 'West', region))
 
 
+# selection of variables based on our exploration 
 cancer2 = cancer %>%
   select(target_death_rate,
          log_ann_count,
@@ -86,11 +90,9 @@ pct_white, pct_black
 
 
 
+
+
 ## Model selection
-
-### Forward selection
-
-### Backward selection
 
 ### Stepwise
 
@@ -122,26 +124,8 @@ cv.out <- cv.glmnet(X[train,],Y[train]) # all possible lambda values
 plot(cv.out) # CV process
 
 coef(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min)) # fitting with chosen lambda
-
+(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min))$dev.ratio
 ```
-
-```{r, eval = FALSE}
-## Lasso based on original data
-Y2 <- cancer$target_death_rate
-X2 <- model.matrix(~ . , data = cancer[, -c(3, 22, 25, 18)])
-train2 <- sample(1:nrow(X2), nrow(X2)/2)
-og_lasso <- glmnet(X2[train2,], Y2[train2], alpha = 1, lambda = grid)
-cv.out_og <- cv.glmnet(X2[train2,],Y2[train2])
-plot(cv.out_og)
-best.lambda_og <- cv.out$lambda.min
-
-og_lasso2 <- glmnet(X2, Y2, alpha = 1, lambda = best.lambda)
-coef(og_lasso2)
-```
-
-### Criteria-based
-
-
 
 
 
