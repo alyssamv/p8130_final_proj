@@ -13,22 +13,21 @@ library(faraway)
 library(HH)
 library(leaps)
 library(caret)
+library('glmnet')                         # for glmnet()
+
 
 cancer = read_csv('./data/Cancer_Registry.csv') %>%
-  janitor::clean_names()
-
-cancer2 = cancer %>%
+  janitor::clean_names() %>%
   mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
          log_ann_count = log(avg_ann_count), # log transformations
          log_deaths_yr = log(avg_deaths_per_year),
          log_pop = log(pop_est2015),
          pct_black_bin = ifelse(pct_black >= 5, 1, 0), # add small decimal 
          pct_asian_bin = ifelse(pct_asian >= 5, 1, 0),
-         pct_other_race_bin = ifelse(pct_other_race >= 5, 1, 0)) %>%
-         # bin_inc_transform = recode("[22640, 34218.1]" = 0.1,
-         #                            "(34218.1, 37413.8]" = 0.2,
-         #                            "(37413.8, 40362.7]" = 0.3,
-         #                            )) %>%
+         pct_other_race_bin = ifelse(pct_other_race >= 5, 1, 0))
+
+
+cancer2 = cancer %>%
   select(target_death_rate,
          log_ann_count,
          incidence_rate,
@@ -47,9 +46,7 @@ cancer2 = cancer %>%
          state
          )
 
-cancer %>%
-  select(median_age, median_age_male, median_age_female, target_death_rate) %>%
-  cor
+
 ```
 
 
@@ -76,11 +73,49 @@ pct_white, pct_black
 ### Stepwise
 
 ```{r}
+#Really full model
 b.fit = lm(target_death_rate ~ ., data = cancer2)
 summary(b.fit)
 summary(lm(target_death_rate ~ ., data = cancer))
+
+#Model 1
+step.fit = step(b.fit)
+summary(step.fit)
 ```
 
+## Lasso Model Selection
+```{r}
+## Lasso on selected variables
+set.seed(1)
+Y <- cancer2$target_death_rate
+#X <- model.matrix(~ log_ann_count + incidence_rate + med_income + poverty_percent + study_per_cap + 
+#                  median_age_male + avg_household_size + percent_married + pct_bach_deg25_over + #pct_black_bin + pct_asian_bin + pct_other_race_bin + pct_private_coverage + pct_public_coverage + #state, data = cancer3)
+
+X <- model.matrix( ~ . , data = cancer2[,-1])
+train <- sample(1:nrow(X), nrow(X)/2)
+grid <- 10^seq(5, -2, length = 100)
+
+lasso1 <- glmnet(X[train ,],Y[train], alpha = 1, lambda = grid)
+cv.out <- cv.glmnet(X[train,],Y[train]) # all possible lambda values
+plot(cv.out) # CV process
+
+coef(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min)) # fitting with chosen lambda
+
+```
+
+```{r, eval = FALSE}
+## Lasso based on original data
+Y2 <- cancer$target_death_rate
+X2 <- model.matrix(~ . , data = cancer[, -c(3, 22, 25, 18)])
+train2 <- sample(1:nrow(X2), nrow(X2)/2)
+og_lasso <- glmnet(X2[train2,], Y2[train2], alpha = 1, lambda = grid)
+cv.out_og <- cv.glmnet(X2[train2,],Y2[train2])
+plot(cv.out_og)
+best.lambda_og <- cv.out$lambda.min
+
+og_lasso2 <- glmnet(X2, Y2, alpha = 1, lambda = best.lambda)
+coef(og_lasso2)
+```
 
 ### Criteria-based
 
