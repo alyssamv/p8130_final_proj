@@ -1,0 +1,89 @@
+---
+title: "Model selection"
+output: html_document
+---
+
+## Data exploration and cleaning
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(faraway)
+library(HH)
+library(leaps)
+library(caret)
+
+cancer = read_csv('./data/Cancer_Registry.csv') %>%
+  janitor::clean_names()
+
+cancer2 = cancer %>%
+  mutate(state = unlist(str_split(geography, ', '))[2], # group counties by state
+         log_ann_count = log(avg_ann_count), # log transformations
+         log_deaths_yr = log(avg_deaths_per_year),
+         log_pop = log(pop_est2015),
+         log_pct_black = log(pct_black),
+         log_pct_asian = log(pct_asian),
+         log_pct_otherrace = log(pct_other_race)) %>%
+         # bin_inc_transform = recode("[22640, 34218.1]" = 0.1,
+         #                            "(34218.1, 37413.8]" = 0.2,
+         #                            "(37413.8, 40362.7]" = 0.3,
+         #                            )) %>%
+  select(target_death_rate,
+         log_ann_count,
+         incidence_rate,
+         med_income,
+         poverty_percent,
+         study_per_cap,
+         median_age_male,
+         avg_household_size,
+         percent_married,
+         pct_bach_deg25_over,
+         log_pct_black,
+         log_pct_asian,
+         log_pct_otherrace,
+         pct_private_coverage,
+         pct_public_coverage
+         )
+
+cancer %>%
+  select(median_age, median_age_male, median_age_female, target_death_rate) %>%
+  cor
+```
+
+
+We first examined variables for any skewness, and then tested associations between covariates to identify potential sources of collinearity. We found that several sets of variables were correlated. 
+
+We saw that median age was highly skewed, to the point that we think there is some sort of data error. Keep this in mind for later; for now we remove from the list of selected parameters. It's also interesting to note that median age between males and females are highly correlated eith each other, but not much correlated with target death rate. In fact, median age in males is negatively correlated with death rate, while median age for females is positively correlated.
+
+groups: 
+avg_ann_count, avg_deaths_per_year, pop_est2015
+poverty_percent, binned_inc
+pct_bach_25, pct_hs25
+pct_white, pct_black
+
+
+
+## Model selection
+
+### Forward selection
+
+### Backward selection
+
+### Stepwise
+
+```{r}
+
+```
+
+
+### Criteria-based
+
+
+
+
+
+
+
+## Model validation
+
