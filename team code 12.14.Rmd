@@ -18,13 +18,13 @@ cancer = read_csv('./data/Cancer_Registry.csv') %>%
   janitor::clean_names()
 
 cancer2 = cancer %>%
-  mutate(state = unlist(str_split(geography, ', '))[2], # group counties by state
+  mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
          log_ann_count = log(avg_ann_count), # log transformations
          log_deaths_yr = log(avg_deaths_per_year),
          log_pop = log(pop_est2015),
-         log_pct_black = log(pct_black),
-         log_pct_asian = log(pct_asian),
-         log_pct_otherrace = log(pct_other_race)) %>%
+         pct_black_bin = ifelse(pct_black >= 5, 1, 0), # add small decimal 
+         pct_asian_bin = ifelse(pct_asian >= 5, 1, 0),
+         pct_other_race_bin = ifelse(pct_other_race >= 5, 1, 0)) %>%
          # bin_inc_transform = recode("[22640, 34218.1]" = 0.1,
          #                            "(34218.1, 37413.8]" = 0.2,
          #                            "(37413.8, 40362.7]" = 0.3,
@@ -39,11 +39,12 @@ cancer2 = cancer %>%
          avg_household_size,
          percent_married,
          pct_bach_deg25_over,
-         log_pct_black,
-         log_pct_asian,
-         log_pct_otherrace,
+         pct_black_bin,
+         pct_asian_bin,
+         pct_other_race_bin,
          pct_private_coverage,
-         pct_public_coverage
+         pct_public_coverage,
+         state
          )
 
 cancer %>%
@@ -55,6 +56,8 @@ cancer %>%
 We first examined variables for any skewness, and then tested associations between covariates to identify potential sources of collinearity. We found that several sets of variables were correlated. 
 
 We saw that median age was highly skewed, to the point that we think there is some sort of data error. Keep this in mind for later; for now we remove from the list of selected parameters. It's also interesting to note that median age between males and females are highly correlated eith each other, but not much correlated with target death rate. In fact, median age in males is negatively correlated with death rate, while median age for females is positively correlated.
+
+We looked again at the variables for the percent of the population of a certain race and found that log transformation was bimodal. It might make sense to make this binary (i.e. >5% of a certain race or not).
 
 groups: 
 avg_ann_count, avg_deaths_per_year, pop_est2015
@@ -73,7 +76,9 @@ pct_white, pct_black
 ### Stepwise
 
 ```{r}
-
+b.fit = lm(target_death_rate ~ ., data = cancer2)
+summary(b.fit)
+summary(lm(target_death_rate ~ ., data = cancer))
 ```
 
 
