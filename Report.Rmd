@@ -1,0 +1,40 @@
+---
+title: "Predicting cancer mortality in the United States"
+author: "Haoran Hu, Runqi Ma, Alyssa Vanderbeek, Zelos Zhu"
+date: "17 December 2018"
+output: pdf_document
+---
+
+## Abstract
+
+Cancer is a leading cause of death in the United States [SOURCE]. Several factors have been linked to cancer risk on individual and ecological scales, including family history, lifestyle habits, median regional income, and others [SOURCE]. We contribute to this area of research, we seek to understand what population attributes can predict cancer mortality per capita (100,000 peresons).
+
+Using county-level data across multiple sources, we evaluate educational, economic, and other population characteristics (e.g. age) and their association with aggregate cancer outcomes. We then fit a linear model to fit and predict cancer mortality.
+
+Our final model predicts cancer mortality rate based on cancer incidence, percent change in the number of new diagnoses from year to year, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, percent unemployment, and the percent of the population with health insurance. However, limitations may exist in limiting prediction to linear models. Further exploration on this topic using alternative and non-linear methods may produce higher accuracy in prediction.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introduction
+
+Cancer is a leading cause of death in the United States [SOURCE]. Large amount of resources are poured into cancer research and treatment, in an effort to better understand the biological pathways, risk factors, and improve outcomes [SOURCE]. Several factors have been linked to cancer risk on individual and ecological scales, including family history, lifestyle habits, median regional income, and others [SOURCE]. In the last twenty years, cancer incidence has been shown to increase. Experts have begged the question of what the reasons for this are; improved detection, poorer lifestyles compared to earlier populations, rampant exposure to risk factors, etc. [SOURCE]. And for many malignancies, prognosis has not much improved despite increased knowledge of biological mechanisms and technological/medical developments [SOURCE]. For example, [statement about how colon cancer incidence has increased but the outcomes have remained stagnant]. Here, we seek to understand what factors can predict cancer mortality per capita (100,000 peresons) using linear regression methods.  
+
+
+
+## Methods
+
+Data was aggregated across multiple sources - including the American Community Survey, US Census, ClinicalTrials.gov, and the National Institutes of Health (NIH).
+
+
+
+
+## Results
+
+
+
+
+
+
+## Discussion
