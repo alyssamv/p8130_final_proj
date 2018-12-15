@@ -1,10 +1,10 @@
 ---
 title: "Detailed coding process"
-output: github_document
+output: pdf_document
 ---
 
 
-```{r setup, include=FALSE}
+```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
@@ -46,19 +46,37 @@ cancer = read_csv('./data/Cancer_Registry.csv') %>%
          log_ann_count = log(avg_ann_count), # log transformations
          log_deaths_yr = log(avg_deaths_per_year),
          log_pop = log(pop_est2015),
-         pct_black_bin = ifelse(pct_black >= 5, 1, 0), # add small decimal 
-         pct_asian_bin = ifelse(pct_asian >= 5, 1, 0),
-         pct_other_race_bin = ifelse(pct_other_race >= 5, 1, 0),
          pct_minority = 100 - pct_white,
-         pct_minority_bin = ifelse(pct_minority >= 20, 1, 0),
-         log_minority = log(pct_minority),
          region = ifelse(state %in% NE.name, 'Northeast', NA), # bin states by geographic region
          region = ifelse(state %in% MW.name, 'Midwest', region),
          region = ifelse(state %in% S.name, 'South', region),
          region = ifelse(state %in% W.name, 'West', region),
          state = recode(state, "District of Columbia" = "Maryland"),
-         pct_college = pct_bach_deg25_over + pct_bach_deg18_24,
-         pct_healthinsurance = pct_private_coverage + pct_public_coverage)
+         pct_college = pct_bach_deg25_over + pct_bach_deg18_24, # aggregate for percent of college graduates
+         pct_healthinsurance = pct_private_coverage + pct_public_coverage) # aggregate for percent with insurance
+
+cancer_all = cancer %>%
+  dplyr::select(-avg_ann_count,
+                -avg_deaths_per_year,
+                -pop_est2015,
+                -pct_white,
+                -pct_black,
+                -pct_asian,
+                -pct_other_race,
+                -pct_bach_deg25_over,
+                -pct_bach_deg18_24,
+                -pct_private_coverage,
+                -pct_public_coverage,
+                -region,
+                -geography,
+                -median_age,
+                -median_age_female,
+                -pct_employed16_over,
+                -pct_some_col18_24,
+                -pct_private_coverage_alone,
+                -pct_public_coverage_alone,
+                -pct_emp_priv_coverage,
+                -binned_inc)
 
 
 # selection of variables based on our exploration 
@@ -72,18 +90,19 @@ cancer_varselect = cancer %>%
                 avg_household_size,
                 percent_married,
                 pct_college,
+                pct_unemployed16_over,
                 pct_minority,
                 pct_healthinsurance,
                 pct_college,
                 state)
 
 
-# cancer %>%
-#   dplyr::select(target_death_rate,
-#                 log_ann_count,
-#                 avg_ann_count,
-#                 incidence_rate) %>%
-#   pairs
+cancer %>%
+  dplyr::select(target_death_rate,
+                log_ann_count,
+                log_deaths_yr,
+                log_pop) %>%
+  cor
 
 ```
 
@@ -120,6 +139,34 @@ Median income and the percent of the population in poverty are correlated with e
 How do we interpret the lack of association between the number of new cancer cases and incidence rate?
 
 
+```{r}
+descrip_list = cancer_varselect %>%
+  dplyr::select(-state) %>%
+  skimr::skim_to_list()
+
+descrip_list[[1]] %>% 
+  mutate(variable = recode(variable, avg_household_size = 'Avg household size',
+                           incidence_rate = 'Cancer incidence',
+                           log_ann_count = 'Percent change in number of new cases',
+                           median_age_male = 'Median age among men',
+                           pct_college = 'Pop. percentage with college degree',
+                           pct_healthinsurance = 'Pop. percentage with insurance',
+                           pct_minority = 'Pop. percentage non-white',
+                           poverty_percent = 'Pop. percentage in poverty',
+                           study_per_cap = 'Avg number of clinical studies',
+                           target_death_rate = 'Cancer mortality rate (per 100,000)')) %>%
+  dplyr::select(Measure = variable, 
+                Obs = n, 
+                NAs = missing, 
+                Min = p0,
+                `1st Q` = p25,
+                Mean = mean,
+                Median = p50,
+                `3rd Q` = p75,
+                Max = p100,
+                `Std Dev` = sd) %>% 
+  knitr::kable(digits = 3)
+```
 
 
 ## Model selection
@@ -130,6 +177,9 @@ How do we interpret the lack of association between the number of new cancer cas
 # Stepwise 
 step.fit = step(lm(target_death_rate ~ ., data = cancer_varselect))
 summary(step.fit)
+
+step.all = step(lm(target_death_rate ~ ., data = cancer_all))
+summary(step.all)
 ```
 
 
@@ -153,6 +203,22 @@ coef(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min)) # fitting with chosen 
 (glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min))$dev.ratio
 ```
 
+```{r}
+set.seed(1)
+Y <- cancer_all$target_death_rate
+X <- model.matrix( ~ . , data = cancer_all[,-1])
+train <- sample(1:nrow(X), nrow(X)/2)
+grid <- 10^seq(5, -2, length = 100)
+
+# lasso1 <- glmnet(X[train ,],Y[train], alpha = 1, lambda = grid)
+cv.out <- cv.glmnet(X[train,],Y[train]) # all possible lambda values
+
+par(mfrow = c(1, 1))
+plot(cv.out) # CV process
+
+coef(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min)) # fitting with chosen lambda
+(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min))$dev.ratio
+```
 
 When we test our original selected variables with a Lasso model, we find that the number of new cases remains a meaningful predictor. However, the percent of people with health insurance is down-weighted. 
 
@@ -224,8 +290,8 @@ kfold_cv = lapply(1:10, function(i){
   data_train <- trainControl(method = "cv", number = 10)
 
   # Fit the model used above
-  model_caret <- train((target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + median_age_male + percent_married + pct_college + pct_minority + pct_healthinsurance + state),
-                     data = cancer_varselect,
+  model_caret <- train((target_death_rate ~ incidence_rate + med_income + median_age_male + avg_household_size + pct_no_hs18_24 + pct_hs18_24 + pct_unemployed16_over + log_ann_count + log_deaths_yr + log_pop + pct_minority + pct_healthinsurance),
+                     data = cancer_all,
                      trControl = data_train,
                      method = 'lm',
                      na.action = na.pass)
