@@ -16,22 +16,6 @@ library('glmnet')                         # for glmnet()
 library(boot)                          # For cv.glm()
 library(MPV)
 
-NE.name <- c("Connecticut","Maine","Massachusetts","New Hampshire",
-             "Rhode Island","Vermont","New Jersey","New York",
-             "Pennsylvania")
-
-MW.name <- c("Indiana","Illinois","Michigan","Ohio","Wisconsin",
-             "Iowa","Kansas","Minnesota","Missouri","Nebraska",
-             "North Dakota","South Dakota")
-
-S.name <- c("Delaware","District of Columbia","Florida","Georgia",
-            "Maryland","North Carolina","South Carolina","Virginia",
-            "West Virginia","Alabama","Kentucky","Mississippi",
-            "Tennessee","Arkansas","Louisiana","Oklahoma","Texas")
-
-W.name <- c("Arizona","Colorado","Idaho","New Mexico","Montana",
-            "Utah","Nevada","Wyoming","Alaska","California",
-            "Hawaii","Oregon","Washington")
 ```
 
 
@@ -43,15 +27,11 @@ W.name <- c("Arizona","Colorado","Idaho","New Mexico","Montana",
 cancer = read_csv('./data/Cancer_Registry.csv') %>%
   janitor::clean_names() %>%
   mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
+         state = recode(state, "District of Columbia" = "Maryland"),
          log_ann_count = log(avg_ann_count), # log transformations
          log_deaths_yr = log(avg_deaths_per_year),
          log_pop = log(pop_est2015),
          pct_minority = 100 - pct_white,
-         region = ifelse(state %in% NE.name, 'Northeast', NA), # bin states by geographic region
-         region = ifelse(state %in% MW.name, 'Midwest', region),
-         region = ifelse(state %in% S.name, 'South', region),
-         region = ifelse(state %in% W.name, 'West', region),
-         state = recode(state, "District of Columbia" = "Maryland"),
          pct_college = pct_bach_deg25_over + pct_bach_deg18_24, # aggregate for percent of college graduates
          pct_healthinsurance = pct_private_coverage + pct_public_coverage) # aggregate for percent with insurance
 
@@ -70,7 +50,6 @@ cancer_varselect = cancer %>%
                 pct_unemployed16_over,
                 pct_minority,
                 pct_healthinsurance,
-                pct_college,
                 state)
 
 
@@ -122,7 +101,7 @@ descrip_list = cancer_varselect %>%
   skimr::skim_to_list()
 
 descrip_list[[1]] %>% 
-  mutate(variable = recode(variable, avg_household_size = 'Avg household size',
+  mutate(variable = recode(avg_household_size = 'Avg household size',
                            incidence_rate = 'Cancer incidence',
                            log_ann_count = 'Percent change in number of new cases',
                            median_age_male = 'Median age among men',
@@ -154,6 +133,9 @@ descrip_list[[1]] %>%
 # Stepwise 
 step.fit = step(lm(target_death_rate ~ ., data = cancer_varselect))
 summary(step.fit)
+
+step.fit.bic = step(lm(target_death_rate ~ ., data = cancer_varselect), k = log(3047))
+summary(step.fit.bic)
 ```
 
 
@@ -178,11 +160,11 @@ coef(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min)) # fitting with chosen 
 ```
 
 
-When we test our original selected variables with a Lasso model, we find the same parameters are downweighted/removed.
+We used a combination of stepwise selection (using AIC) and Lasso to choose our final model. When we tested our original selected variables under both processes, we find the same parameters are downweighted/removed.
 
-We also tried fitting Lasso on the full original dataset (with our transformed/grouped variables) and found that many of the covariates appeared meaningful. However, this model was seen to be overfitting the data, especially since it chose to include some predictors with known correlation, suggesting presence of multicollinearity.
+We also tried fitting Lasso on the full original dataset (with our transformed/grouped variables) and found that many of the covariates appeared meaningful. However, this model seemed to overfit the data, especially since it chose to include some predictors with known correlation (e.g. median income and the percent of the population in poverty), suggesting presence of multicollinearity.
 
-The stepwise process eliminated the percent of the population with health insurance as a predictor of cancer mortality per capita. However, we suspect this may be a practically meaningful covariate, since it has been shown that those with health insurance tend to have improved cancer outcomes over those without health insurance. This was done on an individual level (https://www.ncbi.nlm.nih.gov/pubmed/29192307) and by relating individual insurance coverage with communities (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5360496/). [Are we at risk of an atomistic fallacy?]
+We performed stepwise regression using both AIC and BIC criterion, and found that using BIC resulted in several fewer variables being selected. But due to known associations between the eliminated variables and cancer mortality, we choose to include them in our model. For example, stepwise regression based on both criteria eliminated the percent of the population with health insurance as a predictor of cancer mortality per capita. However, we suspect this may be a practically meaningful covariate, since it has been shown that those with health insurance tend to have improved cancer outcomes over those without health insurance. This was done on an individual level (https://www.ncbi.nlm.nih.gov/pubmed/29192307) and by relating individual insurance coverage with communities (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5360496/). 
 
 Our final model uses cancer incidence, percent change in the number of new diagnoses from year to year, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, percent unemployment, and the percent of the population with health insurance to predict the average cancer death rate per 100,000 across states.
 
@@ -229,9 +211,8 @@ par(mfrow = c(2, 2))
 plot(fit_noinfluential)
 ```
 
-Skewness still exists without these influential points, but the model's R2 and Adj R2 both improve slightly.
+Skewness still exists without these influential points, but the model's R2 and Adj R2 both improve marginally. As a result, we opt to keep these observations in our model.
 
-What is the takeaway?
 
 
 
