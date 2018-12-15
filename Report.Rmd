@@ -111,6 +111,19 @@ descrip_list[[1]] %>%
   knitr::kable(digits = 3)
 ```
 
+
+```{r, fig.height=6, fig.width=4.5, fig.align='center'}
+cancer %>%
+  dplyr::select(state, target_death_rate) %>% 
+  mutate(state = fct_reorder(state, target_death_rate)) %>% 
+  ggplot(aes(x = state, y = target_death_rate) ) +
+  geom_boxplot() +
+  theme_bw() +
+  coord_flip() +
+  labs(x = '',
+       y = 'Cancer mortality (deaths per 100,000 persons)')
+```
+
 \pagebreak
 
 ## Results
@@ -151,6 +164,12 @@ summary(final.model) %>%
                digits = 3)
 ```
 
+
+We saw positive associations with death rate in incidence, age, poverty, unemployment and proportion of minorities; holding all else constant, each one unit increase of cancer incidence per capita per year, mean cancer mortality is expected to increase by 0.2; with each one percent increase in the percent of population in poverty, mean cancer mortality per capita is expected to increase by 0.67; with each one year increase in median age among men, mean cancer mortalities per capita is expected to increase by 0.23; with each one percent increase in the minority population, mean cancer mortality per capita is expected to increase by 0.06. 
+
+Negative associations were seen with marriage, proportion of college graduates, and health insurance status. Adjusting for all other covariates in model, with each one percent increase in the percentage of married people, mean cancer mortality per capita is expected to decrease by 0.17; with one percent increase in the percent of people who earned bachelor’s degree, mean cancer mortality per capita is expected to decrease by 0.79; and with one percent increase health insurance coverage, mean cancer mortality per capita is expected to decrease by 0.09. 
+
+Percent married, percent of minority, and percent of health insurance coverage are not significant (P > 0.05). Expected cancer mortality rate varies by state, as expected. The adjusted R-squared of the model is 0.55, which is acceptable.
 
 We checked model assumptions, and found that the distribution has long tails, suggesting that there are a substantial number of counties with extremely large or extremely small cancer mortality rates (Figure 2). Only a few of these outliers in Virginia and Nevada showed evidence of influencing the model, and upon inspection proved not to significantly alter the results or improve the diagnostics.
 
