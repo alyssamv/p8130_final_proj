@@ -1,0 +1,269 @@
+---
+title: "Detailed coding process"
+output: github_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(faraway)
+library(HH)
+library(leaps)
+library(caret)
+library('glmnet')                         # for glmnet()
+library(boot)                          # For cv.glm()
+library(MPV)
+
+NE.name <- c("Connecticut","Maine","Massachusetts","New Hampshire",
+             "Rhode Island","Vermont","New Jersey","New York",
+             "Pennsylvania")
+
+MW.name <- c("Indiana","Illinois","Michigan","Ohio","Wisconsin",
+             "Iowa","Kansas","Minnesota","Missouri","Nebraska",
+             "North Dakota","South Dakota")
+
+S.name <- c("Delaware","District of Columbia","Florida","Georgia",
+            "Maryland","North Carolina","South Carolina","Virginia",
+            "West Virginia","Alabama","Kentucky","Mississippi",
+            "Tennessee","Arkansas","Louisiana","Oklahoma","Texas")
+
+W.name <- c("Arizona","Colorado","Idaho","New Mexico","Montana",
+            "Utah","Nevada","Wyoming","Alaska","California",
+            "Hawaii","Oregon","Washington")
+```
+
+
+## Data exploration and cleaning
+
+
+```{r}
+# import data
+cancer = read_csv('./data/Cancer_Registry.csv') %>%
+  janitor::clean_names() %>%
+  mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
+         log_ann_count = log(avg_ann_count), # log transformations
+         log_deaths_yr = log(avg_deaths_per_year),
+         log_pop = log(pop_est2015),
+         pct_black_bin = ifelse(pct_black >= 5, 1, 0), # add small decimal 
+         pct_asian_bin = ifelse(pct_asian >= 5, 1, 0),
+         pct_other_race_bin = ifelse(pct_other_race >= 5, 1, 0),
+         pct_minority = 100 - pct_white,
+         pct_minority_bin = ifelse(pct_minority >= 20, 1, 0),
+         log_minority = log(pct_minority),
+         region = ifelse(state %in% NE.name, 'Northeast', NA), # bin states by geographic region
+         region = ifelse(state %in% MW.name, 'Midwest', region),
+         region = ifelse(state %in% S.name, 'South', region),
+         region = ifelse(state %in% W.name, 'West', region),
+         state = recode(state, "District of Columbia" = "Maryland"),
+         pct_college = pct_bach_deg25_over + pct_bach_deg18_24,
+         pct_healthinsurance = pct_private_coverage + pct_public_coverage)
+
+
+# selection of variables based on our exploration 
+cancer_varselect = cancer %>%
+  dplyr::select(target_death_rate,
+                log_ann_count,
+                incidence_rate,
+                poverty_percent,
+                study_per_cap,
+                median_age_male,
+                avg_household_size,
+                percent_married,
+                pct_college,
+                pct_minority,
+                pct_healthinsurance,
+                pct_college,
+                state)
+
+
+cancer %>%
+  dplyr::select(target_death_rate,
+                log_ann_count,
+                avg_ann_count,
+                incidence_rate) %>%
+  pairs
+
+```
+
+
+```{r}
+# cancer %>%
+#   group_by(state) %>%
+#   ggplot(aes(y = target_death_rate, x = state)) + 
+#   geom_violin() + 
+#   coord_flip()
+# 
+# cancer %>%
+#   group_by(region) %>%
+#   ggplot(aes(y = target_death_rate, x = region)) + 
+#   geom_violin()
+# 
+# cancer %>%
+#   ggplot(aes(y = pct_minority, x = state)) +
+#   geom_violin() +
+#   coord_flip()
+```
+
+
+We first examined variables for any skewness, and then tested associations between covariates to identify potential sources of collinearity. We found that several sets of variables were correlated. 
+
+We saw that median age was highly skewed, to the point that we think there is some sort of data error. Keep this in mind for later; for now we remove from the list of selected parameters. We opt instead to use the median age in males as a proxy, since the distribution (discarding the outliers in median age) is comparable to median age overall and median age in females. It's also interesting to note that median age between males and females are highly correlated eith each other, but not much correlated with target death rate. In fact, median age in males is negatively correlated with death rate, while median age for females is positively correlated.
+
+We looked again at the variables for the percent of the population of a certain race and found that log transformation was bimodal. It might make sense to make this binary (i.e. >5% of a certain race or not). In the end, we chose to make a single variable measuring the percent of the population that is non-white (considered minority). This variable was skewed, but we did not perform a transformation for the sake of interpretability.
+
+We combined several variables to create aggregate measures. We initially thought to group counties by region (Northeast, South, Midwest, West), but found that state-level groupings provided better fit and predictive capability. We designated the District of Columbia as being part of Maryland, since it had a single observation. We also created single measures for the percent of the population with a bachelor's degree and percent of the population with health insurance.
+
+Median income and the percent of the population in poverty are correlated with each other as well as the percent of the population with a college degree. Percent in poverty had a slightly higher association with the death rate, and a slightly lower correlation with education (as measured), so we opted to include it over median income. 
+
+How do we interpret the lack of association between the number of new cancer cases and incidence rate?
+
+
+
+
+## Model selection
+
+### Stepwise
+
+```{r}
+# All covariates
+b.fit = lm(target_death_rate ~ ., data = cancer_varselect)
+summary(b.fit)
+
+# Stepwise 
+step.fit = step(b.fit)
+summary(step.fit)
+
+# Decided model based on stepwise and decision about meaningful covariates
+final.model = lm(target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_minority + pct_healthinsurance +
+    state, 
+    data = cancer_varselect)
+summary(final.model)
+```
+
+The stepwise process eliminated the percent of the population with health insurance as a predictor of cancer mortality per capita. However, we suspect this may be a practically meaningful covariate, since it has been shown that those with health insurance tend to have improved cancer outcomes over those without health insurance. This was done on an individual level (https://www.ncbi.nlm.nih.gov/pubmed/29192307) and by relating individual insurance coverage with communities (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5360496/). [Are we at risk of an atomistic fallacy?]
+
+
+## Lasso Model Selection
+```{r}
+## Lasso on selected variables
+set.seed(1)
+Y <- cancer_varselect$target_death_rate
+X <- model.matrix( ~ . , data = cancer_varselect[,-1])
+train <- sample(1:nrow(X), nrow(X)/2)
+grid <- 10^seq(5, -2, length = 100)
+
+# lasso1 <- glmnet(X[train ,],Y[train], alpha = 1, lambda = grid)
+cv.out <- cv.glmnet(X[train,],Y[train]) # all possible lambda values
+
+par(mfrow = c(1, 1))
+plot(cv.out) # CV process
+
+coef(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min)) # fitting with chosen lambda
+(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min))$dev.ratio
+```
+
+
+When we test our original selected variables with a Lasso model, we find that the number of new cases remains a meaningful predictor. However, the percent of people with health insurance is down-weighted. 
+
+We also tried fitting Lasso on the full original dataset (with our transformed/grouped variables) and found that many of the covariates appeared meaningful. However, this model was seen to be overfitting the data.
+
+Our final model uses cancer incidence, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, and the percent of the population with health insurance to predict the average cancer death rate per 100,000 across states.
+
+
+## Model diagnostics
+
+Testing assumptions for model selected by stepqise regression:
+
+```{r}
+par(mfrow = c(2, 2))
+plot(final.model)
+```
+
+We see that there are long tails on both sides of the distribution. This may be due to outliers at either extreme, so next we examine presence of outliers and potentially influential points.
+
+```{r}
+stu_res <- rstandard(final.model)
+outliers_y <- stu_res[abs(stu_res) > 2.5] # there are 71 outliers
+
+# None of the points lie beyond a Cook's distane of 0.5, but point 116, 124, and 282 are noted
+
+# Examine results with and without observations 5 and 28 that have very high survivals (>2000)
+cancer_influential = cancer_varselect[c(116, 124, 282), ] # only potential influencers
+cancer_noinfluential = cancer_varselect[-c(116, 124, 282), ] # all rows except potential influencers
+
+fit_noinfluential <- lm(target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_minority + pct_healthinsurance +
+    state, data = cancer_noinfluential)
+
+
+summary(fit_noinfluential)
+plot(fit_noinfluential)
+```
+
+Skewness still exists without these influential points, but the model's R2 and Adj R2 both improve slightly.
+
+What is the takeaway?
+
+
+
+
+## Model validation
+
+K-fold CV
+
+```{r}
+kfold_cv = lapply(1:10, function(i){
+  # create 10-fold training datasets
+  data_train <- trainControl(method = "cv", number = 10)
+
+  # Fit the model used above
+  model_caret <- train((target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + median_age_male + percent_married + pct_college + pct_minority + pct_healthinsurance + state),
+                     data = cancer_varselect,
+                     trControl = data_train,
+                     method = 'lm',
+                     na.action = na.pass)
+  
+  #return(list(model_caret$results, model_caret$resample))
+  return(model_caret$results)
+})
+
+do.call("rbind", kfold_cv) %>%
+  dplyr::select(RMSE, RMSESD) %>% # summarise(mse = mean(RMSE))
+  mutate(MSE = RMSE^2,
+         std.error = RMSESD / 9) %>%
+  dplyr::select(1, 3, 2, 4) %>% summarise(MSE = mean(MSE),
+                                          RMSE = mean(RMSE),
+                                          SE = mean(std.error)) %>%
+  knitr::kable()
+```
+
+
+Our 10-fold cross validation shows root MSE of ~18.7. Performing leave-one-out (N-fold) cross validation gives a comparable value. We also examine other criteria (SSE, R-squared, and PRESS):
+
+
+Criterion comparison
+
+```{r}
+newsummary <- function(model)
+{
+    list('coefs'    = round(t(summary(model)$coef[, 1:2]), 4),
+         'criteria' = cbind('SSE'   = anova(model)["Residuals", "Sum Sq"],
+                            'PRESS' = PRESS(model),
+                            'MSE'   = anova(model)["Residuals", "Mean Sq"],
+                            'Adjusted Rsq'   = summary(model)$adj.r.squared))
+}
+
+newsummary(lm(target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_minority + pct_healthinsurance +
+    state, data = cancer_varselect))$criteria %>%
+  knitr::kable()
+
+```
+
+
+## Commentary
+
+
