@@ -78,12 +78,12 @@ cancer_varselect = cancer %>%
                 state)
 
 
-cancer %>%
-  dplyr::select(target_death_rate,
-                log_ann_count,
-                avg_ann_count,
-                incidence_rate) %>%
-  pairs
+# cancer %>%
+#   dplyr::select(target_death_rate,
+#                 log_ann_count,
+#                 avg_ann_count,
+#                 incidence_rate) %>%
+#   pairs
 
 ```
 
@@ -127,26 +127,14 @@ How do we interpret the lack of association between the number of new cancer cas
 ### Stepwise
 
 ```{r}
-# All covariates
-b.fit = lm(target_death_rate ~ ., data = cancer_varselect)
-summary(b.fit)
-
 # Stepwise 
-step.fit = step(b.fit)
+step.fit = step(lm(target_death_rate ~ ., data = cancer_varselect))
 summary(step.fit)
-
-# Decided model based on stepwise and decision about meaningful covariates
-final.model = lm(target_death_rate ~ incidence_rate + poverty_percent + 
-    median_age_male + percent_married + pct_college + pct_minority + pct_healthinsurance +
-    state, 
-    data = cancer_varselect)
-summary(final.model)
 ```
 
-The stepwise process eliminated the percent of the population with health insurance as a predictor of cancer mortality per capita. However, we suspect this may be a practically meaningful covariate, since it has been shown that those with health insurance tend to have improved cancer outcomes over those without health insurance. This was done on an individual level (https://www.ncbi.nlm.nih.gov/pubmed/29192307) and by relating individual insurance coverage with communities (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5360496/). [Are we at risk of an atomistic fallacy?]
 
+### Lasso Model Selection
 
-## Lasso Model Selection
 ```{r}
 ## Lasso on selected variables
 set.seed(1)
@@ -170,7 +158,20 @@ When we test our original selected variables with a Lasso model, we find that th
 
 We also tried fitting Lasso on the full original dataset (with our transformed/grouped variables) and found that many of the covariates appeared meaningful. However, this model was seen to be overfitting the data.
 
+The stepwise process eliminated the percent of the population with health insurance as a predictor of cancer mortality per capita. However, we suspect this may be a practically meaningful covariate, since it has been shown that those with health insurance tend to have improved cancer outcomes over those without health insurance. This was done on an individual level (https://www.ncbi.nlm.nih.gov/pubmed/29192307) and by relating individual insurance coverage with communities (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5360496/). [Are we at risk of an atomistic fallacy?]
+
 Our final model uses cancer incidence, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, and the percent of the population with health insurance to predict the average cancer death rate per 100,000 across states.
+
+```{r}
+# Decided model based on stepwise and decision about meaningful covariates
+final.model = lm(target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_minority + pct_healthinsurance +
+    state, 
+    data = cancer_varselect)
+summary(final.model)
+```
+
+
 
 
 ## Model diagnostics
@@ -200,12 +201,15 @@ fit_noinfluential <- lm(target_death_rate ~ log_ann_count + incidence_rate + pov
 
 
 summary(fit_noinfluential)
+par(mfrow = c(2, 2))
 plot(fit_noinfluential)
 ```
 
 Skewness still exists without these influential points, but the model's R2 and Adj R2 both improve slightly.
 
 What is the takeaway?
+
+
 
 
 
@@ -262,6 +266,9 @@ newsummary(lm(target_death_rate ~ log_ann_count + incidence_rate + poverty_perce
   knitr::kable()
 
 ```
+
+
+
 
 
 ## Commentary
