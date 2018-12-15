@@ -92,8 +92,6 @@ We combined several variables to create aggregate measures. We initially thought
 
 Median income and the percent of the population in poverty are correlated with each other as well as the percent of the population with a college degree. Percent in poverty had a slightly higher association with the death rate, and a slightly lower correlation with education (as measured), so we opted to include it over median income. 
 
-How do we interpret the lack of association between the number of new cancer cases and incidence rate?
-
 
 ```{r, echo = FALSE, include = TRUE}
 descrip_list = cancer_varselect %>%
@@ -101,7 +99,7 @@ descrip_list = cancer_varselect %>%
   skimr::skim_to_list()
 
 descrip_list[[1]] %>% 
-  mutate(variable = recode(avg_household_size = 'Avg household size',
+  mutate(variable = recode(variable, avg_household_size = 'Avg household size',
                            incidence_rate = 'Cancer incidence',
                            log_ann_count = 'Percent change in number of new cases',
                            median_age_male = 'Median age among men',
@@ -252,8 +250,6 @@ do.call("rbind", kfold_cv) %>%
 ```
 
 
-Our 10-fold cross validation shows root MSE of ~18.7. Performing leave-one-out (N-fold) cross validation gives a comparable value. We also examine other criteria (SSE, R-squared, and PRESS):
-
 
 Criterion comparison
 
@@ -275,10 +271,13 @@ newsummary(lm(target_death_rate ~ incidence_rate + poverty_percent +
 
 ```
 
-
+Our 10-fold cross validation shows root MSE of ~18.7. Performing leave-one-out (N-fold) cross validation gives a comparable value. We also examine other criteria (SSE, R-squared, and PRESS). 
 
 
 
 ## Commentary
 
 
+Our model does a decent job of predicting cancer mortality rates, despite challenges. Skewness in the data is a hurdle that we cannot seem to overcome using linear methods; non-linear alternatives may better handle this issue. 
+
+That being said, our final model is not the one with the lowest MSE, but it accounts for over 50% of the variability in the outcome and uses what we believe is the fewest number of significant and/or practically meaningful covariates. 

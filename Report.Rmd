@@ -7,34 +7,167 @@ output: pdf_document
 
 ## Abstract
 
-Cancer is a leading cause of death in the United States [SOURCE]. Several factors have been linked to cancer risk on individual and ecological scales, including family history, lifestyle habits, median regional income, and others [SOURCE]. We contribute to this area of research, we seek to understand what population attributes can predict cancer mortality per capita (100,000 peresons).
+**Background** Cancer is a leading cause of death in the United States [Wang]. Several factors have been linked to cancer risk on individual and ecological scales, including family history, lifestyle habits, median regional income, and others [NIH]. We seek to understand what population attributes can predict cancer mortality per capita (100,000 persons).
 
-Using county-level data across multiple sources, we evaluate educational, economic, and other population characteristics (e.g. age) and their association with aggregate cancer outcomes. We then fit a linear model to fit and predict cancer mortality.
+**Data** Data for this study is aggregated from United States Census Bureau database, ClinicalTrials.gov database, and National Cancer Institute (NIH) database. The final dataset, which consists of information for 3047 counties, includes demographic, cancer incidence, and cancer mortality data. 
 
-Our final model predicts cancer mortality rate based on cancer incidence, percent change in the number of new diagnoses from year to year, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, percent unemployment, and the percent of the population with health insurance. However, limitations may exist in limiting prediction to linear models. Further exploration on this topic using alternative and non-linear methods may produce higher accuracy in prediction.
+**Methods** We evaluate educational, economic, and other population characteristics (e.g. age) and their association with aggregate cancer outcomes on a state level and fit a linear model to fit and predict cancer mortality. 
+
+**Results** Our final model predicts cancer mortality rate based on cancer incidence, percent change in the number of new diagnoses from year to year, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, percent unemployment, and the percent of the population with health insurance. 
+
+**Discussion** Our final model is not the one with the lowest MSE, but it accounts for over 50% of the variability in the outcome and uses what we believe is the fewest number of significant and/or practically meaningful covariates. Additionally, limitations may exist in limiting prediction to linear models. Further exploration on this topic using alternative and non-linear methods may produce higher accuracy in prediction.
+
+\pagebreak
+
+
+
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+
+# import data
+cancer = read_csv('./data/Cancer_Registry.csv') %>%
+  janitor::clean_names() %>%
+  mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
+         state = recode(state, "District of Columbia" = "Maryland"),
+         log_ann_count = log(avg_ann_count), # log transformations
+         log_deaths_yr = log(avg_deaths_per_year),
+         log_pop = log(pop_est2015),
+         pct_minority = 100 - pct_white,
+         pct_college = pct_bach_deg25_over + pct_bach_deg18_24, # aggregate for percent of college graduates
+         pct_healthinsurance = pct_private_coverage + pct_public_coverage) %>% # aggregate for percent with insurance
+          dplyr::select(target_death_rate,
+                        log_ann_count,
+                        incidence_rate,
+                        poverty_percent,
+                        study_per_cap,
+                        median_age_male,
+                        avg_household_size,
+                        percent_married,
+                        pct_college,
+                        pct_unemployed16_over,
+                        pct_minority,
+                        pct_healthinsurance,
+                        state)
 ```
+
+
+
+
 
 ## Introduction
 
-Cancer is a leading cause of death in the United States [SOURCE]. Large amount of resources are poured into cancer research and treatment, in an effort to better understand the biological pathways, risk factors, and improve outcomes [SOURCE]. Several factors have been linked to cancer risk on individual and ecological scales, including family history, lifestyle habits, median regional income, and others [SOURCE]. In the last twenty years, cancer incidence has been shown to increase. Experts have begged the question of what the reasons for this are; improved detection, poorer lifestyles compared to earlier populations, rampant exposure to risk factors, etc. [SOURCE]. And for many malignancies, prognosis has not much improved despite increased knowledge of biological mechanisms and technological/medical developments [SOURCE]. For example, [statement about how colon cancer incidence has increased but the outcomes have remained stagnant]. Here, we seek to understand what factors can predict cancer mortality per capita (100,000 peresons) using linear regression methods.  
+Cancer is a leading cause of death in the United States [Wang]. Large amount of resources are poured into cancer research and treatment, in an effort to better understand the biological pathways, risk factors, and improve outcomes [SOURCE]. Several factors have been linked to cancer risk on individual and ecological scales, including family history, lifestyle habits, median regional income, and others [NIH]. In the last twenty years, cancer incidence has been shown to increase. However, it's unclear the extent to which this rise in incidence ought to be attributed to improved detection, poorer lifestyles compared to earlier populations, rampant exposure to risk factors, etc. [SOURCE]. And for many malignancies, prognosis has not much improved despite increased knowledge of biological mechanisms and technological/medical developments [SOURCE]. Here, we seek to understand what factors can predict cancer mortality per capita (100,000 persons) using linear regression methods.   
 
 
 
 ## Methods
 
-Data was aggregated across multiple sources - including the American Community Survey, US Census, ClinicalTrials.gov, and the National Institutes of Health (NIH).
+Data was aggregated across multiple sources - including the American Community Survey, US Census, ClinicalTrials.gov, and the National Institutes of Health (NIH). 
+
+Several groups of covariates were observed to be associated with each other, or had skewed distributions. We cleaned the data to address these issues, and among correlated covariates, chose the single possible predictor that is most associated with the outcome. Namely, we recoded counties as their home state; we looked across age groups at the percent of people with college degrees; we transformed the number of new cases of cancer to a logarithmic scale; and we looked at the percent of the population that was non-white, as opposed to looking at the makeup of specific races (Table 1). Ultimately, we examined the significance of number of diagnosed cancer, cancer incidence rate, percentage of the population in poverty, per capita number of cancer-related clinical trials, median age, average number of people in a household, percent of the population that is married, education level, and health care coverage in predicting cancer mortality rate across states.
+
+We fit a linear model using a combination of stepwise and Lasso methods. We use AIC criterion in stepwise model selection. In the Lasso model, a variety of $\lambda$ values ranging from $10^{-2}$ to $10^{5}$, were tested to determine the ideal lambda for the Lasso model. 
 
 
+```{r}
+descrip_list = cancer %>%
+  dplyr::select(-state) %>%
+  skimr::skim_to_list()
 
+descrip_list[[1]] %>% 
+  mutate(variable = recode(variable, avg_household_size = 'Avg household size',
+                           incidence_rate = 'Cancer incidence',
+                           log_ann_count = 'Percent change in number of new cases',
+                           median_age_male = 'Median age among men',
+                           pct_college = 'Pop. percentage with college degree',
+                           pct_healthinsurance = 'Pop. percentage with insurance',
+                           pct_minority = 'Pop. percentage non-white',
+                           pct_unemployed16_over = 'Unemployment rate',
+                           percent_married = 'Pop. percentage married',
+                           poverty_percent = 'Pop. percentage in poverty',
+                           study_per_cap = 'Avg number of clinical studies',
+                           target_death_rate = 'Cancer mortality rate (per 100,000)')) %>%
+  dplyr::select(Measure = variable, 
+                Min = p0,
+                `1st Q` = p25,
+                Mean = mean,
+                Median = p50,
+                `3rd Q` = p75,
+                Max = p100,
+                `Std Dev` = sd) %>% 
+  knitr::kable(digits = 3)
+```
+
+\pagebreak
 
 ## Results
 
+Our final model uses cancer incidence, percent change in the number of new diagnoses from year to year, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, percent unemployment, and the percent of the population with health insurance to predict the average cancer death rate per 100,000 across states. Chosen predictors and their effects are given in Table 2; estimates for individual states are not shown, but differences can be seen in Figure 1.
 
 
+```{r}
+final.model = lm(target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority +
+    pct_healthinsurance + state, 
+    data = cancer)
 
+summary(final.model) %>% 
+  coefficients %>%
+  as.data.frame %>%
+  rownames_to_column('Variable') %>%
+  mutate(Estimate = round(Estimate, 3),
+         `Std. Error` = round(`Std. Error`, 3),
+         Estimate = paste0(Estimate, ' (', `Std. Error`, ')' ),
+         Variable = recode(Variable, avg_household_size = 'Avg household size',
+                           incidence_rate = 'Cancer incidence',
+                           log_ann_count = 'Percent change in number of new cases',
+                           median_age_male = 'Median age among men',
+                           pct_college = 'Pop. percentage with college degree',
+                           pct_healthinsurance = 'Pop. percentage with insurance',
+                           pct_minority = 'Pop. percentage non-white',
+                           pct_unemployed16_over = 'Unemployment rate',
+                           percent_married = 'Pop. percentage married',
+                           poverty_percent = 'Pop. percentage in poverty',
+                           study_per_cap = 'Avg number of clinical studies',
+                           target_death_rate = 'Cancer mortality rate (per 100,000)')) %>%
+  rename('p-value' = `Pr(>|t|)`,
+         'Estimate (SE)' = Estimate) %>%
+  filter(!(grepl("state", Variable, fixed = TRUE))) %>%
+  dplyr::select(1, 2, 5) %>%
+  knitr::kable(caption = 'Predictors of cancer mortality (number of cancer deaths per 100,000 persons) across states',
+               digits = 3)
+```
+
+
+There are associations with death rate in incidence, age, poverty, unemployment and proportion of minorities. Negative associations were seen with marriage rate, proportion of college graduates, and health insurance status.
 
 
 ## Discussion
+
+The associations seen in our model results are not all too surprising considering the variables with the positive association are commonly deemed as disadvantages in society while those with the negative associations can be deemed as measures of success. It was interesting to note, however, that some known predictors of cancer outcomes were not statistically significant at the 5% significance level. For example, race (the proportion of the population that is non-white), is not significant here despite known associations with cancer outcomes [Katz]; the same can be said for health insurance coverage [Niu] and marital status [Aizer].
+
+Our model does a decent job of predicting cancer mortality rates, despite challenges. Skewness in the data is a hurdle that we cannot seem to overcome using linear methods; non-linear alternatives or machine learning processes may better handle this issue. That being said, our final model is not the one with the lowest MSE, but it accounts for over 50% of the variability in the outcome and uses what we believe is the fewest number of significant and/or practically meaningful covariates. 
+
+
+
+## References
+
+Abdelsattar ZM, Hendren S, Wong SL. The impact of health insurance on cancer care in disadvantaged communities. Cancer. 2016;123(7):1219-1227.
+
+Aizer AA, Chen MH, McCarthy EP, et al. Marital status and survival in patients with cancer.J Clin Oncol.2013;31:3869-3876.
+
+NIH. Age and cancer risk. https://www.cancer.gov/about-cancer/causes-prevention/risk/age.
+
+NIH. Risk factors for cancer. https://www.cancer.gov/about-cancer/causes-prevention/risk.
+
+Ellis, Canchola AJ, Spiegel D, Ladabaum U, Haile R, Gomez SL.Trends in Cancer Survival by Health Insurance Status in California From 1997 to 2014.JAMA Oncol. 2018 Mar 1;4(3):317-323. 
+
+Katz M, Parrish ME, Li E, et al. The Effect of Race/Ethnicity on the Age of Colon Cancer Diagnosis. J Health Dispar Res Pract. 2013;6(1):62-69.
+
+Wang H. et al. Global, regional, and national life expectancy, all-cause mortality, and cause-specific mortality for 249 causes of death, 1980-2015: a systematic analysis for the Global Burden of Disease Study 2015. GBD 2015 Mortality and Causes of Death Collaborators. Lancet. 2016 Oct 8; 388(10053):1459-1544.
+
+Niu X, Roche L, Pawlish K, Henry A. Cancer survival disparities by health insurance status. Cancer Med. 2013 Jun; 2(3): 403-411.
