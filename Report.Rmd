@@ -106,7 +106,7 @@ descrip_list[[1]] %>%
 
 ## Results
 
-Our final model uses cancer incidence, percent change in the number of new diagnoses from year to year, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, percent unemployment, and the percent of the population with health insurance to predict the average cancer death rate per 100,000 across states. Chosen predictors and their effects are given in Table 2; estimates for individual states are not shown, but differences can be seen in Figure 1.
+Our final model uses cancer incidence, percent change in the number of new diagnoses from year to year, percent of the population in poverty, median age, percent of the population that is married, percent of the population with a college degree, percent of the population that is non-white, percent unemployment, and the percent of the population with health insurance to predict the average cancer death rate per 100,000 across states. Chosen predictors and their effects are given in Table 2; estimates for individual states are not shown, but differences can be seen in Figure 1. There are positive associations with death rate in incidence, age, poverty, unemployment and proportion of minorities. Negative associations were seen with marriage rate, proportion of college graduates, and health insurance status.
 
 
 ```{r}
@@ -143,8 +143,16 @@ summary(final.model) %>%
 ```
 
 
-There are associations with death rate in incidence, age, poverty, unemployment and proportion of minorities. Negative associations were seen with marriage rate, proportion of college graduates, and health insurance status.
+We checked model assumptions, and found that the distribution has long tails, suggesting that there are a substantial number of counties with extremely large or extremely small cancer mortality rates (Figure 2).
 
+\pagebreak
+
+```{r, out.extra='angle=90', fig.height=6, fig.width=8, fig.align='center'}
+par(mfrow = c(2, 2))
+plot(final.model)
+```
+
+\pagebreak
 
 ## Discussion
 
