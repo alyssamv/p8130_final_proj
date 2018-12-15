@@ -1,0 +1,152 @@
+---
+title: "Exploratory Plot"
+author: "Runqi Ma"
+date: "2018/12/15"
+output: github_document
+---
+
+```{r setup, message = FALSE, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(faraway)
+library(HH)
+library(leaps)
+library(caret)
+                        # for glmnet()
+library(boot)                          # For cv.glm()
+library(MPV)
+
+NE.name <- c("Connecticut","Maine","Massachusetts","New Hampshire",
+             "Rhode Island","Vermont","New Jersey","New York",
+             "Pennsylvania")
+
+MW.name <- c("Indiana","Illinois","Michigan","Ohio","Wisconsin",
+             "Iowa","Kansas","Minnesota","Missouri","Nebraska",
+             "North Dakota","South Dakota")
+
+S.name <- c("Delaware","District of Columbia","Florida","Georgia",
+            "Maryland","North Carolina","South Carolina","Virginia",
+            "West Virginia","Alabama","Kentucky","Mississippi",
+            "Tennessee","Arkansas","Louisiana","Oklahoma","Texas")
+
+W.name <- c("Arizona","Colorado","Idaho","New Mexico","Montana",
+            "Utah","Nevada","Wyoming","Alaska","California",
+            "Hawaii","Oregon","Washington")
+```
+
+
+
+
+```{r, message = FALSE, include = FALSE}
+# import data
+cancer = read_csv('./data/Cancer_Registry.csv') %>%
+  janitor::clean_names() %>%
+  mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
+         log_ann_count = log(avg_ann_count), # log transformations
+         log_deaths_yr = log(avg_deaths_per_year),
+         log_pop = log(pop_est2015),
+         pct_minority = 100 - pct_white,
+         region = ifelse(state %in% NE.name, 'Northeast', NA), # bin states by geographic region
+         region = ifelse(state %in% MW.name, 'Midwest', region),
+         region = ifelse(state %in% S.name, 'South', region),
+         region = ifelse(state %in% W.name, 'West', region),
+         state = recode(state, "District of Columbia" = "Maryland"),
+         pct_college = pct_bach_deg25_over + pct_bach_deg18_24, # aggregate for percent of college graduates
+         pct_healthinsurance = pct_private_coverage + pct_public_coverage) # aggregate for percent with insurance
+
+cancer_all = cancer %>%
+  dplyr::select(-avg_ann_count,
+                -avg_deaths_per_year,
+                -pop_est2015,
+                -pct_white,
+                -pct_black,
+                -pct_asian,
+                -pct_other_race,
+                -pct_bach_deg25_over,
+                -pct_bach_deg18_24,
+                -pct_private_coverage,
+                -pct_public_coverage,
+                -region,
+                -geography,
+                -median_age,
+                -median_age_female,
+                -pct_employed16_over,
+                -pct_some_col18_24,
+                -pct_private_coverage_alone,
+                -pct_public_coverage_alone,
+                -pct_emp_priv_coverage,
+                -binned_inc)
+
+
+# selection of variables based on our exploration 
+cancer_varselect = cancer %>%
+  dplyr::select(target_death_rate,
+                log_ann_count,
+                incidence_rate,
+                poverty_percent,
+                study_per_cap,
+                median_age_male,
+                avg_household_size,
+                percent_married,
+                pct_college,
+                pct_unemployed16_over,
+                pct_minority,
+                pct_healthinsurance,
+                pct_college,
+                state)
+
+
+cancer %>%
+  dplyr::select(target_death_rate,
+                log_ann_count,
+                log_deaths_yr,
+                log_pop) %>%
+  cor
+
+```
+
+```{r}
+cancer_varselect %>%
+  dplyr::select(-state) %>% 
+  gather() %>%
+  as.data.frame() %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram() +
+  facet_wrap(~ key, scales = "free_x")
+
+
+cancer_varselect %>%
+  dplyr::select(-state) %>% 
+  gather() %>%
+  as.data.frame() %>% 
+  ggplot(aes(y = value)) +
+  geom_violin(aes(x = 1,y = value)) +
+  geom_boxplot() +
+  facet_wrap(~ key, scales = "free_y") 
+
+```
+
+```{r}
+cancer_varselect %>%
+  dplyr::select(state, target_death_rate) %>% 
+  mutate(state = fct_reorder(state, target_death_rate)) %>% 
+  ggplot(aes(x = state, y = target_death_rate) ) +
+  geom_boxplot() +
+  theme_bw() +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+```
+
+```{r}
+cancer_varselect %>%
+  dplyr::select(-state) %>% 
+  gather(key = key, value = value, log_ann_count:pct_healthinsurance) %>%
+  as.data.frame() %>% 
+  ggplot(aes(x = value, y = target_death_rate)) +
+  geom_point(alpha = .1) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~ key, scales = "free_x")
+```
+
