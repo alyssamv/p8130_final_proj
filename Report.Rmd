@@ -112,17 +112,7 @@ descrip_list[[1]] %>%
 ```
 
 
-```{r, fig.height=6, fig.width=4.5, fig.align='center'}
-cancer %>%
-  dplyr::select(state, target_death_rate) %>% 
-  mutate(state = fct_reorder(state, target_death_rate)) %>% 
-  ggplot(aes(x = state, y = target_death_rate) ) +
-  geom_boxplot() +
-  theme_bw() +
-  coord_flip() +
-  labs(x = '',
-       y = 'Cancer mortality (deaths per 100,000 persons)')
-```
+![State-level observations](./mortality_state.pdf)
 
 \pagebreak
 
