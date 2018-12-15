@@ -170,7 +170,7 @@ Our final model uses cancer incidence, percent change in the number of new diagn
 
 ```{r}
 # Decided model based on stepwise and decision about meaningful covariates
-final.model = lm(target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + 
+final.model = lm(target_death_rate ~ incidence_rate + poverty_percent + 
     median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority +
     pct_healthinsurance + state, 
     data = cancer_varselect)
@@ -200,7 +200,7 @@ outliers_y <- stu_res[abs(stu_res) > 2.5] # there are 71 outliers
 # Examine results with and without observations 5 and 28 that have very high survivals (>2000)
 cancer_noinfluential = cancer_varselect[-c(116, 124, 282), ] # all rows except potential influencers
 
-fit_noinfluential <- lm(target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + 
+fit_noinfluential <- lm(target_death_rate ~ incidence_rate + poverty_percent + 
     median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority +
     pct_healthinsurance + state, 
     data = cancer_noinfluential)
@@ -229,7 +229,7 @@ kfold_cv = lapply(1:10, function(i){
   data_train <- trainControl(method = "cv", number = 10)
 
   # Fit the model used above
-  model_caret <- train((target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + 
+  model_caret <- train((target_death_rate ~ incidence_rate + poverty_percent + 
     median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority + pct_healthinsurance +
     state),
                      data = cancer_varselect,
@@ -267,7 +267,7 @@ newsummary <- function(model)
                             'Adjusted Rsq'   = summary(model)$adj.r.squared))
 }
 
-newsummary(lm(target_death_rate ~ log_ann_count + incidence_rate + poverty_percent + 
+newsummary(lm(target_death_rate ~ incidence_rate + poverty_percent + 
     median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority +
     pct_healthinsurance + state, 
     data = cancer_varselect))$criteria %>%
