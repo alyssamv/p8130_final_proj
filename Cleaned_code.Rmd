@@ -1,0 +1,258 @@
+---
+title: "Complete code"
+author: "Haoran Hu, Runqi Ma, Alyssa Vanderbeek, Zelos Zhu"
+date: "12/16/2018"
+output: github_document
+---
+
+#Load Libraries
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = FALSE)
+
+library(tidyverse)
+library(faraway)
+library(HH)
+library(leaps)
+library(caret)
+library('glmnet')                         # for glmnet()
+library(boot)                          # For cv.glm()
+library(MPV)
+library(patchwork)
+```
+
+#Data import/cleaning
+```{r}
+# import data
+cancer = read_csv('./data/Cancer_Registry.csv') %>%
+  janitor::clean_names() %>%
+  mutate(state = str_replace(str_extract(geography, ', .*'), ', ', ''), # group counties by state
+         state = recode(state, "District of Columbia" = "Maryland"),
+         log_ann_count = log(avg_ann_count), # log transformations
+         log_deaths_yr = log(avg_deaths_per_year),
+         log_pop = log(pop_est2015),
+         pct_minority = 100 - pct_white,
+         pct_college = pct_bach_deg25_over + pct_bach_deg18_24, # aggregate for percent of college graduates
+         pct_healthinsurance = pct_private_coverage + pct_public_coverage) # aggregate for percent with insurance
+
+
+# selection of variables based on our exploration 
+cancer_varselect = cancer %>%
+  dplyr::select(target_death_rate,
+                log_ann_count,
+                incidence_rate,
+                poverty_percent,
+                study_per_cap,
+                median_age_male,
+                avg_household_size,
+                percent_married,
+                pct_college,
+                pct_unemployed16_over,
+                pct_minority,
+                pct_healthinsurance,
+                state)
+
+#Check for some initial correlations
+cancer %>%
+  dplyr::select(target_death_rate,
+                log_ann_count,
+                log_deaths_yr,
+                log_pop) %>%
+  cor
+```
+
+#Render Table 1
+```{r}
+descrip_list = cancer_varselect %>%
+  dplyr::select(-state) %>%
+  skimr::skim_to_list()
+
+descrip_list[[1]] %>% 
+  mutate(variable = recode(variable, avg_household_size = 'Avg household size',
+                           incidence_rate = 'Cancer incidence',
+                           log_ann_count = 'Percent change in number of new cases',
+                           median_age_male = 'Median age among men',
+                           pct_college = 'Pop. percentage with college degree',
+                           pct_healthinsurance = 'Pop. percentage with insurance',
+                           pct_minority = 'Pop. percentage non-white',
+                           pct_unemployed16_over = 'Unemployment rate',
+                           percent_married = 'Pop. percentage married',
+                           poverty_percent = 'Pop. percentage in poverty',
+                           study_per_cap = 'Avg number of clinical studies',
+                           target_death_rate = 'Cancer mortality rate (per 100,000)')) %>%
+  dplyr::select(Measure = variable, 
+                Min = p0,
+                `1st Q` = p25,
+                Mean = mean,
+                Median = p50,
+                `3rd Q` = p75,
+                Max = p100,
+                `Std Dev` = sd) %>% 
+  knitr::kable(digits = 3)
+```
+
+#Render Figure 1
+```{r}
+knitr::opts_chunk$set(
+  fig.width = 10,
+  fig.asp = .8,
+  out.width = "100%"
+)
+
+a = cancer_varselect %>%
+  dplyr::select(state, target_death_rate) %>% 
+  mutate(state = fct_reorder(state, target_death_rate))
+
+state_boxplot = 
+  a %>% 
+  ggplot(aes(x = state, y = target_death_rate) ) +
+  geom_boxplot() +
+  theme_bw() +
+  coord_flip() +
+  labs(x = "State", y = "Cancer Mortalities Mean per capita (100,000) ")
+
+state_hist = 
+  a %>% 
+  group_by(state) %>% 
+  summarise(`Number of observations` = length(state)) %>% 
+  filter( `Number of observations` > 1) %>% 
+  ggplot(aes(y = `Number of observations`, x = state)) + 
+  geom_col(fill = "navy") + 
+  labs(x = "State", y = "Number of observations") +
+  theme(axis.text.x = element_text(face = "plain",color = "black", hjust = 1, angle = 90)) + 
+  coord_flip() +
+  theme_bw()
+
+state_boxplot + state_hist
+```
+
+# Model selection
+```{r}
+### Stepwise
+step.fit = step(lm(target_death_rate ~ ., data = cancer_varselect))
+summary(step.fit)
+
+#step.fit.bic = step(lm(target_death_rate ~ ., data = cancer_varselect), k = log(3047))
+#summary(step.fit.bic)
+
+
+###Lasso
+set.seed(1)
+Y <- cancer_varselect$target_death_rate
+X <- model.matrix( ~ . , data = cancer_varselect[,-1])
+train <- sample(1:nrow(X), nrow(X)/2)
+grid <- 10^seq(5, -2, length = 100)
+
+# lasso1 <- glmnet(X[train ,],Y[train], alpha = 1, lambda = grid)
+cv.out <- cv.glmnet(X[train,],Y[train]) # all possible lambda values
+
+par(mfrow = c(1, 1))
+plot(cv.out) # CV process
+
+coef(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min)) # fitting with chosen lambda
+(glmnet(X, Y, alpha = 1, lambda = cv.out$lambda.min))$dev.ratio
+```
+
+#Render Table 2/Model Summary
+```{r}
+# Decided model based on stepwise and decision about meaningful covariates
+final.model = lm(target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority +
+    pct_healthinsurance + state, 
+    data = cancer)
+
+summary(final.model) %>% 
+  coefficients %>%
+  as.data.frame %>%
+  rownames_to_column('Variable') %>%
+  mutate(Estimate = round(Estimate, 3),
+         `Std. Error` = round(`Std. Error`, 3),
+         Estimate = paste0(Estimate, ' (', `Std. Error`, ')' ),
+         Variable = recode(Variable, avg_household_size = 'Avg household size',
+                           incidence_rate = 'Cancer incidence',
+                           log_ann_count = 'Percent change in number of new cases',
+                           median_age_male = 'Median age among men',
+                           pct_college = 'Pop. percentage with college degree',
+                           pct_healthinsurance = 'Pop. percentage with insurance',
+                           pct_minority = 'Pop. percentage non-white',
+                           pct_unemployed16_over = 'Unemployment rate',
+                           percent_married = 'Pop. percentage married',
+                           poverty_percent = 'Pop. percentage in poverty',
+                           study_per_cap = 'Avg number of clinical studies',
+                           target_death_rate = 'Cancer mortality rate (per 100,000)')) %>%
+  rename('p-value' = `Pr(>|t|)`,
+         'Estimate (SE)' = Estimate) %>%
+  filter(!(grepl("state", Variable, fixed = TRUE))) %>%
+  dplyr::select(1, 2, 5) %>%
+  knitr::kable(caption = 'Predictors of cancer mortality (number of cancer deaths per 100,000 persons) across states',
+               digits = 3)
+```
+
+#Model diagnositics/Check for Outliers
+```{r}
+par(mfrow = c(2, 2))
+plot(final.model)
+
+#Check outliers/influential points
+stu_res <- rstandard(final.model)
+outliers_y <- stu_res[abs(stu_res) > 2.5] # there are 71 outliers
+
+# None of the points lie beyond a Cook's distane of 0.5, but point 116, 124, and 282 are noted
+
+# Examine results with and without observations 5 and 28 that have very high survivals (>2000)
+cancer_noinfluential = cancer_varselect[-c(116, 124, 282), ] # all rows except potential influencers
+
+fit_noinfluential <- lm(target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority +
+    pct_healthinsurance + state, 
+    data = cancer_noinfluential)
+
+
+summary(fit_noinfluential)
+par(mfrow = c(2, 2))
+plot(fit_noinfluential)
+```
+
+#Cross Validation Process
+```{r, echo = FALSE, include = TRUE}
+kfold_cv = lapply(1:10, function(i){
+  # create 10-fold training datasets
+  data_train <- trainControl(method = "cv", number = 10)
+
+  # Fit the model used above
+  model_caret <- train((target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority + pct_healthinsurance +
+    state),
+                     data = cancer_varselect,
+                     trControl = data_train,
+                     method = 'lm',
+                     na.action = na.pass)
+  
+  #return(list(model_caret$results, model_caret$resample))
+  return(model_caret$results)
+})
+
+do.call("rbind", kfold_cv) %>%
+  dplyr::select(RMSE, RMSESD) %>% # summarise(mse = mean(RMSE))
+  mutate(MSE = RMSE^2,
+         std.error = RMSESD / 9) %>%
+  dplyr::select(1, 3, 2, 4) %>% summarise(MSE = mean(MSE),
+                                          RMSE = mean(RMSE),
+                                          SE = mean(std.error)) %>%
+  knitr::kable()
+
+
+newsummary <- function(model)
+{
+    list('coefs'    = round(t(summary(model)$coef[, 1:2]), 4),
+         'criteria' = cbind('SSE'   = anova(model)["Residuals", "Sum Sq"],
+                            'PRESS' = PRESS(model),
+                            'RMSE'   = sqrt(anova(model)["Residuals", "Mean Sq"]),
+                            'Adjusted Rsq'   = summary(model)$adj.r.squared))
+}
+
+newsummary(lm(target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_male + percent_married + pct_college + pct_unemployed16_over + pct_minority +
+    pct_healthinsurance + state, 
+    data = cancer_varselect))$criteria %>%
+  knitr::kable()
+```
