@@ -125,7 +125,7 @@ state_hist =
 state_boxplot + state_hist
 ```
 
-# Model selection
+#Model selection
 ```{r}
 ### Stepwise
 step.fit = step(lm(target_death_rate ~ ., data = cancer_varselect))
