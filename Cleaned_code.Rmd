@@ -6,7 +6,7 @@ output: github_document
 ---
 
 #Load Libraries
-```{r setup, include=FALSE}
+```{r setup}
 knitr::opts_chunk$set(include = FALSE)
 
 library(tidyverse)
@@ -51,7 +51,7 @@ cancer_varselect = cancer %>%
                 pct_healthinsurance,
                 state)
 
-#Check for some initial correlations
+#Check for some initial correlations (one example)
 cancer %>%
   dplyr::select(target_death_rate,
                 log_ann_count,
@@ -213,7 +213,7 @@ plot(fit_noinfluential)
 ```
 
 #Cross Validation Process
-```{r, echo = FALSE, include = TRUE}
+```{r}
 kfold_cv = lapply(1:10, function(i){
   # create 10-fold training datasets
   data_train <- trainControl(method = "cv", number = 10)
